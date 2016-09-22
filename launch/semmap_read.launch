@@ -1,0 +1,15 @@
+<launch>
+  
+  <!-- Publish point cloud from file -->
+  <node pkg="semantic_mapper" type="semantic_mapper" name="semantic_mapper" output="screen">
+    <param name="file_path" value="/home/brigit/jackrabbot/iro_data/hallway_3_7_office_29_label_rtabmap_tilt.ply" />
+    <!--param name="file_path" value="/home/brigit/jackrabbot/iro_data/hallway_3_7_office_29_label_rtabmap.ply" /-->
+    <param name="topic"     value="/semantic_map" />
+    <param name="frame"     value="map" />
+    <param name="rate"      value="1.0" />
+  </node>
+    
+  <!-- Visualize the point cloud in rviz -->
+  <!--node name="rviz" pkg="rviz" type="rviz" args="-d $(find point_cloud_io)/examples/point_cloud_io.rviz" /-->
+    
+</launch>
