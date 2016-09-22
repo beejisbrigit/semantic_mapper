@@ -187,9 +187,9 @@ void Read::pointCloudCallback(const sensor_msgs::PointCloud2ConstPtr& cloud)
   ROS_INFO("pcl2->pcl_xzyrgb");
 
   // convert current point cloud to pcl::PointXYZ for kdtree NN search
-  //pcl::PointCloud<pcl::PointXYZ>::Ptr temp_cloud_xyz_ptr(new pcl::PointCloud<pcl::PointXYZ>); // need to use ctr!!
-  //pcl::copyPointCloud(*temp_cloud, *temp_cloud_xyz_ptr); // copy PointXYZRGBs to PointXYZs
-  //ROS_INFO("pcl_xzyrgb->pcl_xyz");
+  pcl::PointCloud<pcl::PointXYZ>::Ptr temp_cloud_xyz_ptr(new pcl::PointCloud<pcl::PointXYZ>); // need to use ctr!!
+  pcl::copyPointCloud(*temp_cloud_ptr, *temp_cloud_xyz_ptr); // copy PointXYZRGBs to PointXYZs
+  ROS_INFO("pcl_xzyrgb->pcl_xyz");
 
   // kdTree NN search
   std::vector<int> pointIdxRadiusSearch;
@@ -211,18 +211,17 @@ void Read::pointCloudCallback(const sensor_msgs::PointCloud2ConstPtr& cloud)
 
 
   // DEBUG: visualize filtered pointcloud
-  pcl::PointCloud<pcl::PointXYZ> radius_cloud(*plyPointCloudXYZ_ptr_, pointIdxRadiusSearch);
+  //pcl::PointCloud<pcl::PointXYZ> radius_cloud(*plyPointCloudXYZ_ptr_, pointIdxRadiusSearch);
   //pcl::PointCloud<pcl::PointXYZRGB> radius_cloud(*plyPointCloud_ptr_, pointIdxRadiusSearch);
-  sensor_msgs::PointCloud2 radiusCloudOut;
+  //sensor_msgs::PointCloud2 radiusCloudOut;
   // Define PointCloud2 message and copy to ROS sensor_msg for publishing
-  pcl::toROSMsg(radius_cloud, radiusCloudOut);
-  radiusCloudOut.header.frame_id = target;
-  ROS_INFO_STREAM("Publishing point cloud!");
+  //pcl::toROSMsg(radius_cloud, radiusCloudOut);
+  //radiusCloudOut.header.frame_id = target;
+  //ROS_INFO_STREAM("Publishing point cloud!");
   //transPointCloudPublisher_.publish(cloudOut);
   // DEBUG: 
-  transPointCloudPublisher_.publish(radiusCloudOut);
+  //transPointCloudPublisher_.publish(radiusCloudOut);
 
-return;
   // --------------------   
 
   // form new kdTree from filtered points (of original semantic point cloud)
@@ -230,24 +229,25 @@ return;
   boost::shared_ptr< const std::vector<int> > ind_ptr = boost::make_shared< const std::vector<int> >(pointIdxRadiusSearch); 
 
   //kdTree for filtered points
-  //pcl::KdTreeFLANN<pcl::PointXYZ> radius_kdTree;
-  //radius_kdTree.setInputCloud(plyPointCloudXYZ_ptr_, ind_ptr);
-  pcl::KdTreeFLANN<pcl::PointXYZRGB> radius_kdTree;
-  radius_kdTree.setInputCloud(plyPointCloud_ptr_, ind_ptr);
+  pcl::KdTreeFLANN<pcl::PointXYZ> radius_kdTree;
+  radius_kdTree.setInputCloud(plyPointCloudXYZ_ptr_, ind_ptr);
+  //jkkk`upcl::KdTreeFLANN<pcl::PointXYZRGB> radius_kdTree;
+  //radius_kdTree.setInputCloud(plyPointCloud_ptr_, ind_ptr);
 
   //static const int k(1);
-  static const int nnRadius(0.1);
+  static const float nnRadius(0.05);
   // reset indices/distances
   pointIdxRadiusSearch.clear();
   pointRadiusSquaredDistance.clear();
 
   // to set rgb values: http://docs.pointclouds.org/1.7.0/structpcl_1_1_point_x_y_z_r_g_b.html
-  //BOOST_FOREACH (pcl::PointXYZ& pt, temp_cloud_xyz_ptr->points) { 
-  BOOST_FOREACH (pcl::PointXYZRGB& pt, temp_cloud_ptr->points) { 
+  BOOST_FOREACH (pcl::PointXYZ& pt, temp_cloud_xyz_ptr->points) { 
+  //BOOST_FOREACH (pcl::PointXYZRGB& pt, temp_cloud_ptr->points) { 
     if( std::isnan(pt.x) || std::isnan(pt.y) || std::isnan(pt.z) ) { // look up why this happens!
 	pt.x = 999; pt.y = 999; pt.z = 999;
    
     }
+     //ROS_INFO_STREAM( "pts: " << pt.x << " " << pt.y << " "  << pt.z);
     // nearest neighbor search which is very slow 
     int nn(0);
 /*    if((nn = radius_kdTree.nearestKSearch(pt, k, pointIdxRadiusSearch, pointRadiusSquaredDistance)) > 0 )
@@ -273,9 +273,9 @@ return;
 
   // publish transformed pointcloud 
   ROS_INFO_STREAM("Publishing point cloud!");
-  //transPointCloudPublisher_.publish(cloudOut);
+  transPointCloudPublisher_.publish(cloudOut);
   // DEBUG: 
-  transPointCloudPublisher_.publish(radiusCloudOut);
+  //transPointCloudPublisher_.publish(radiusCloudOut);
 
   clock_t ticks = clock() - start;
   ROS_INFO("Elapsed time: %f secs", (double)ticks/CLOCKS_PER_SEC );
