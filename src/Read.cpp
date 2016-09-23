@@ -234,8 +234,18 @@ void Read::pointCloudCallback(const sensor_msgs::PointCloud2ConstPtr& cloud)
   //jkkk`upcl::KdTreeFLANN<pcl::PointXYZRGB> radius_kdTree;
   //radius_kdTree.setInputCloud(plyPointCloud_ptr_, ind_ptr);
 
+/* DEBUG: check indices  
+  int cnt(0);
+  std::vector<int> v = *(radius_kdTree.getIndices());
+  // compare indices! ind_ptr != radius_kdTree indices probably
+  BOOST_FOREACH(int i, *ind_ptr) {
+	ROS_INFO_STREAM("kdd idx: " << i << " kdd radius idx: " << v[cnt++]);
+  }
+*/
+
   //static const int k(1);
   static const float nnRadius(0.05);
+  std::vector<float> minDistancePoints(640*480, 0.0);
   // reset indices/distances
   pointIdxRadiusSearch.clear();
   pointRadiusSquaredDistance.clear();
@@ -245,29 +255,35 @@ void Read::pointCloudCallback(const sensor_msgs::PointCloud2ConstPtr& cloud)
   //BOOST_FOREACH (pcl::PointXYZRGB& pt, temp_cloud_ptr->points) { 
     if( std::isnan(pt.x) || std::isnan(pt.y) || std::isnan(pt.z) ) { // look up why this happens!
 	pt.x = 999; pt.y = 999; pt.z = 999;
-   
     }
      //ROS_INFO_STREAM( "pts: " << pt.x << " " << pt.y << " "  << pt.z);
     // nearest neighbor search which is very slow 
-    int nn(0);
+//    int nn(0);
 /*    if((nn = radius_kdTree.nearestKSearch(pt, k, pointIdxRadiusSearch, pointRadiusSquaredDistance)) > 0 )
     {
        //ROS_INFO_STREAM("Found " << nn << " nearest neighbors."); 
     }
 */
-    if ( radius_kdTree.radiusSearch(pt, nnRadius, pointIdxRadiusSearch, pointRadiusSquaredDistance) > 0 ) { 
+    // pointIdxRadiusSearch indices index into original point clouds
+    if ( radius_kdTree.radiusSearch(pt, nnRadius, pointIdxRadiusSearch, pointRadiusSquaredDistance,1) > 0 ) { 
 
-    ROS_INFO_STREAM("Found " << pointIdxRadiusSearch.size() << " neighbors." );
-/*    for (size_t i = 0; i < pointIdxRadiusSearch.size (); ++i) {
+    //ROS_INFO_STREAM("Found " << pointIdxRadiusSearch.size() << " neighbors." );
+    //ROS_INFO_STREAM("Index " << pointIdxRadiusSearch[0] );
+    // set this value to cloudOut value
+    pt.x = 0; pt.y = 0; pt.z = 0;
+
+    /*for (size_t i = 0; i < pointIdxRadiusSearch.size (); ++i) {
       std::cout << "    "  <<   temp_cloud_xyz_ptr->points[ pointIdxRadiusSearch[i] ].x 
                 << " " << temp_cloud_xyz_ptr->points[ pointIdxRadiusSearch[i] ].y 
                 << " " << temp_cloud_xyz_ptr->points[ pointIdxRadiusSearch[i] ].z 
                 << " (squared distance: " << pointRadiusSquaredDistance[i] << ")" << std::endl;
  
-      }*/ 
+      }
+    */
     }
+
+    //ROS_INFO("------------------------------------");
     //    
-  
    
  } 
 
