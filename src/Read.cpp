@@ -176,16 +176,11 @@ void Read::pointCloudCallback(const sensor_msgs::PointCloud2ConstPtr& cloud)
   sensor_msgs::PointCloud2 cloudOut;
   pcl_ros::transformPointCloud(target, transform, *cloud, cloudOut);
 
-  // convert sensor_msg::PointCloud2 to pcl::PointCloud 
-  //  [const boost::shared_ptr<const sensor_msgs::PointCloud2>& input;]
-  pcl::PCLPointCloud2 pcl_pc2; // pcl ROS-ish point cloud 
-  pcl_conversions::toPCL(cloudOut, pcl_pc2);
-  ROS_INFO("sm_pcl2->pcl2");
-
   // convert from sensor_messages::PointCloud2->pcl::PCLPointCloud2->pcl native pcl::PointXYZRGB
   pcl::PointCloud<pcl::PointXYZRGB>::Ptr temp_cloud_ptr(new pcl::PointCloud<pcl::PointXYZRGB>);
-  pcl::fromPCLPointCloud2(pcl_pc2, *temp_cloud_ptr); // dereference pointer to pointer
-  ROS_INFO("pcl2->pcl_xzyrgb");
+  //pcl::fromPCLPointCloud2(pcl_pc2, *temp_cloud_ptr); // dereference pointer to pointer
+  pcl::fromROSMsg(cloudOut, *temp_cloud_ptr); // dereference pointer to pointer
+  ROS_INFO("ros->pcl_xzyrgb");
 
   // convert current point cloud to pcl::PointXYZ for kdtree NN search
   pcl::PointCloud<pcl::PointXYZ>::Ptr temp_cloud_xyz_ptr(new pcl::PointCloud<pcl::PointXYZ>); // need to use ctr!!
@@ -208,7 +203,6 @@ void Read::pointCloudCallback(const sensor_msgs::PointCloud2ConstPtr& cloud)
   pcl::compute3DCentroid(*temp_cloud_ptr, centroid); 
   pcl::PointXYZ centroidPt(centroid.x(),centroid.y(), centroid.z());
   //pcl::PointXYZRGB centroidPt(centroid.x(),centroid.y(), centroid.z());
-  //centroidPt.rgb = 0;
   kdTree_.radiusSearch(centroidPt, radius, pointIdxRadiusSearch, pointRadiusSquaredDistance);
 
   ROS_INFO_STREAM("centroid: (" << centroid.x() << "," << centroid.y() << ","  << centroid.z() << ")");
@@ -256,31 +250,20 @@ void Read::pointCloudCallback(const sensor_msgs::PointCloud2ConstPtr& cloud)
   pointIdxRadiusSearch.clear();
   pointRadiusSquaredDistance.clear();
 
-//  for(int i; i<temp_cloud_ptr->points.size(); ++i) {
-//     temp_cloud_ptr->points[i].rgb = 0;
-//  } 
-
   // to set rgb values: http://docs.pointclouds.org/1.7.0/structpcl_1_1_point_x_y_z_r_g_b.html
   //BOOST_FOREACH (pcl::PointXYZ& pt, temp_cloud_xyz_ptr->points) { 
   BOOST_FOREACH (pcl::PointXYZRGB& pt, temp_cloud_ptr->points) { 
     if( std::isnan(pt.x) || std::isnan(pt.y) || std::isnan(pt.z) ) { // look up why this happens!
 	pt.x = 999; pt.y = 999; pt.z = 999;
     }
-     //uint32_t rgb = *reinterpret_cast<int*>(&pt.rgb);
-     //uint8_t r = (rgb >> 16) & 0x0000ff;
-     //uint8_t g = (rgb >> 8)  & 0x0000ff;
-     //uint8_t b = (rgb)       & 0x0000ff;
-     //ROS_INFO_STREAM( "r/g/b: " << static_cast<int>(r) << " " << static_cast<int>(g) << " " << static_cast<int>(b));
-     uint8_t r = 0, g = 255, b = 0;    // Example: green color
-     pcl::PointXYZRGB newPt(r, g, b);
-     newPt.x = pt.x;
-     newPt.y = pt.y;
-     newPt.z = pt.z;
-     pt = newPt;
-     //uint32_t rgb = ((uint32_t)r << 16 | (uint32_t)g << 8 | (uint32_t)b);
-     //pt.rgb = *reinterpret_cast<float*>(&rgb);
-     //pt.r = 0; pt.g = 255; pt.b = 0;
-     //ROS_INFO_STREAM( "pt r/g/b: " << static_cast<int>(pt.r) << " " << static_cast<int>(pt.g) << " " << static_cast<int>(pt.b));
+
+    pt.r = 0; pt.g = 255; pt.b = 0;
+
+    // uint8_t r = 0, g = 255, b = 0;
+    //uint32_t rgb = ((uint32_t)r << 16 | (uint32_t)g << 8 | (uint32_t)b);
+    //pt.rgb = *reinterpret_cast<float*>(&rgb);
+
+    //ROS_INFO_STREAM( "pt r/g/b: " << static_cast<int>(pt.r) << " " << static_cast<int>(pt.g) << " " << static_cast<int>(pt.b));
      //ROS_INFO_STREAM( "pts: " << pt.x << " " << pt.y << " "  << pt.z);
     // nearest neighbor search which is very slow 
 //    int nn(0);
@@ -313,13 +296,8 @@ void Read::pointCloudCallback(const sensor_msgs::PointCloud2ConstPtr& cloud)
    
  }
 
-  pcl::PCLPointCloud2 pcl_pc2_out; // pcl ROS-ish point cloud 
-  pcl::toPCLPointCloud2(*temp_cloud_ptr, pcl_pc2_out); 
-
   sensor_msgs::PointCloud2 cloudOutLabel;
   pcl::toROSMsg(*temp_cloud_ptr, cloudOutLabel);
-  //pcl_conversions::fromPCL(pcl_pc2_out, cloudOutLabel);
-  //pcl::toROSMsg(*temp_cloud_ptr, cloudOutLabel);
   cloudOutLabel.header.frame_id = target;
 
   // publish transformed pointcloud 
