@@ -38,6 +38,7 @@ Read::Read(ros::NodeHandle& nodeHandle)
   pointCloudPublisher_ = nodeHandle_.advertise<sensor_msgs::PointCloud2>(pointCloudTopic_, 1, true);
   // PointCloud2 subscriber for new depth sensor scans
   pointCloudSubscriber_ = nodeHandle_.subscribe("/camera/depth_registered/points", 1, &Read::pointCloudCallback, this);
+  //pointCloudSubscriber_ = nodeHandle_.subscribe("/camera/depth/points", 1, &Read::pointCloudCallback, this);
   transPointCloudPublisher_ = nodeHandle_.advertise<sensor_msgs::PointCloud2>("/trans_depth_points", 1, true);
   // publish from here
   initialize();
@@ -191,6 +192,11 @@ void Read::pointCloudCallback(const sensor_msgs::PointCloud2ConstPtr& cloud)
   pcl::copyPointCloud(*temp_cloud_ptr, *temp_cloud_xyz_ptr); // copy PointXYZRGBs to PointXYZs
   ROS_INFO("pcl_xzyrgb->pcl_xyz");
 
+  // DEBUG: test transformed point clouds 
+  //sensor_msgs::PointCloud2 cloudOutTest;
+  //pcl::toROSMsg(*temp_cloud_xyz_ptr, cloudOutTest);
+  //cloudOutTest.header.frame_id = target;
+
   // kdTree NN search
   std::vector<int> pointIdxRadiusSearch;
   std::vector<float> pointRadiusSquaredDistance;
@@ -231,7 +237,7 @@ void Read::pointCloudCallback(const sensor_msgs::PointCloud2ConstPtr& cloud)
   //kdTree for filtered points
   pcl::KdTreeFLANN<pcl::PointXYZ> radius_kdTree;
   radius_kdTree.setInputCloud(plyPointCloudXYZ_ptr_, ind_ptr);
-  //jkkk`upcl::KdTreeFLANN<pcl::PointXYZRGB> radius_kdTree;
+  //pcl::KdTreeFLANN<pcl::PointXYZRGB> radius_kdTree;
   //radius_kdTree.setInputCloud(plyPointCloud_ptr_, ind_ptr);
 
 /* DEBUG: check indices  
@@ -245,17 +251,36 @@ void Read::pointCloudCallback(const sensor_msgs::PointCloud2ConstPtr& cloud)
 
   //static const int k(1);
   static const float nnRadius(0.05);
-  std::vector<float> minDistancePoints(640*480, 0.0);
+  //std::vector<float> minDistancePoints(640*480, 0.0);
   // reset indices/distances
   pointIdxRadiusSearch.clear();
   pointRadiusSquaredDistance.clear();
 
+//  for(int i; i<temp_cloud_ptr->points.size(); ++i) {
+//     temp_cloud_ptr->points[i].rgb = 0;
+//  } 
+
   // to set rgb values: http://docs.pointclouds.org/1.7.0/structpcl_1_1_point_x_y_z_r_g_b.html
-  BOOST_FOREACH (pcl::PointXYZ& pt, temp_cloud_xyz_ptr->points) { 
-  //BOOST_FOREACH (pcl::PointXYZRGB& pt, temp_cloud_ptr->points) { 
+  //BOOST_FOREACH (pcl::PointXYZ& pt, temp_cloud_xyz_ptr->points) { 
+  BOOST_FOREACH (pcl::PointXYZRGB& pt, temp_cloud_ptr->points) { 
     if( std::isnan(pt.x) || std::isnan(pt.y) || std::isnan(pt.z) ) { // look up why this happens!
 	pt.x = 999; pt.y = 999; pt.z = 999;
     }
+     //uint32_t rgb = *reinterpret_cast<int*>(&pt.rgb);
+     //uint8_t r = (rgb >> 16) & 0x0000ff;
+     //uint8_t g = (rgb >> 8)  & 0x0000ff;
+     //uint8_t b = (rgb)       & 0x0000ff;
+     //ROS_INFO_STREAM( "r/g/b: " << static_cast<int>(r) << " " << static_cast<int>(g) << " " << static_cast<int>(b));
+     uint8_t r = 0, g = 255, b = 0;    // Example: green color
+     pcl::PointXYZRGB newPt(r, g, b);
+     newPt.x = pt.x;
+     newPt.y = pt.y;
+     newPt.z = pt.z;
+     pt = newPt;
+     //uint32_t rgb = ((uint32_t)r << 16 | (uint32_t)g << 8 | (uint32_t)b);
+     //pt.rgb = *reinterpret_cast<float*>(&rgb);
+     //pt.r = 0; pt.g = 255; pt.b = 0;
+     //ROS_INFO_STREAM( "pt r/g/b: " << static_cast<int>(pt.r) << " " << static_cast<int>(pt.g) << " " << static_cast<int>(pt.b));
      //ROS_INFO_STREAM( "pts: " << pt.x << " " << pt.y << " "  << pt.z);
     // nearest neighbor search which is very slow 
 //    int nn(0);
@@ -264,13 +289,14 @@ void Read::pointCloudCallback(const sensor_msgs::PointCloud2ConstPtr& cloud)
        //ROS_INFO_STREAM("Found " << nn << " nearest neighbors."); 
     }
 */
+    pcl::PointXYZ xyzPt(pt.x, pt.y, pt.z);
     // pointIdxRadiusSearch indices index into original point clouds
-    if ( radius_kdTree.radiusSearch(pt, nnRadius, pointIdxRadiusSearch, pointRadiusSquaredDistance,1) > 0 ) { 
+    if ( radius_kdTree.radiusSearch(xyzPt, nnRadius, pointIdxRadiusSearch, pointRadiusSquaredDistance,1) > 0 ) { 
 
     //ROS_INFO_STREAM("Found " << pointIdxRadiusSearch.size() << " neighbors." );
     //ROS_INFO_STREAM("Index " << pointIdxRadiusSearch[0] );
     // set this value to cloudOut value
-    pt.x = 0; pt.y = 0; pt.z = 0;
+   // pt.rgb = 0; 
 
     /*for (size_t i = 0; i < pointIdxRadiusSearch.size (); ++i) {
       std::cout << "    "  <<   temp_cloud_xyz_ptr->points[ pointIdxRadiusSearch[i] ].x 
@@ -285,13 +311,23 @@ void Read::pointCloudCallback(const sensor_msgs::PointCloud2ConstPtr& cloud)
     //ROS_INFO("------------------------------------");
     //    
    
- } 
+ }
+
+  pcl::PCLPointCloud2 pcl_pc2_out; // pcl ROS-ish point cloud 
+  pcl::toPCLPointCloud2(*temp_cloud_ptr, pcl_pc2_out); 
+
+  sensor_msgs::PointCloud2 cloudOutLabel;
+  pcl::toROSMsg(*temp_cloud_ptr, cloudOutLabel);
+  //pcl_conversions::fromPCL(pcl_pc2_out, cloudOutLabel);
+  //pcl::toROSMsg(*temp_cloud_ptr, cloudOutLabel);
+  cloudOutLabel.header.frame_id = target;
 
   // publish transformed pointcloud 
   ROS_INFO_STREAM("Publishing point cloud!");
-  transPointCloudPublisher_.publish(cloudOut);
+  //transPointCloudPublisher_.publish(cloudOut);
   // DEBUG: 
   //transPointCloudPublisher_.publish(radiusCloudOut);
+  transPointCloudPublisher_.publish(cloudOutLabel);
 
   clock_t ticks = clock() - start;
   ROS_INFO("Elapsed time: %f secs", (double)ticks/CLOCKS_PER_SEC );
