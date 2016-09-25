@@ -244,7 +244,7 @@ void Read::pointCloudCallback(const sensor_msgs::PointCloud2ConstPtr& cloud)
 */
 
   //static const int k(1);
-  static const float nnRadius(0.05);
+  static const float nnRadius(0.15);
   //std::vector<float> minDistancePoints(640*480, 0.0);
   // reset indices/distances
   pointIdxRadiusSearch.clear();
@@ -257,7 +257,7 @@ void Read::pointCloudCallback(const sensor_msgs::PointCloud2ConstPtr& cloud)
 	pt.x = 999; pt.y = 999; pt.z = 999;
     }
 
-    pt.r = 0; pt.g = 255; pt.b = 0;
+    //pt.r = 0; pt.g = 255; pt.b = 0;
 
     // uint8_t r = 0, g = 255, b = 0;
     //uint32_t rgb = ((uint32_t)r << 16 | (uint32_t)g << 8 | (uint32_t)b);
@@ -276,10 +276,14 @@ void Read::pointCloudCallback(const sensor_msgs::PointCloud2ConstPtr& cloud)
     // pointIdxRadiusSearch indices index into original point clouds
     if ( radius_kdTree.radiusSearch(xyzPt, nnRadius, pointIdxRadiusSearch, pointRadiusSquaredDistance,1) > 0 ) { 
 
-    //ROS_INFO_STREAM("Found " << pointIdxRadiusSearch.size() << " neighbors." );
-    //ROS_INFO_STREAM("Index " << pointIdxRadiusSearch[0] );
-    // set this value to cloudOut value
-   // pt.rgb = 0; 
+      //pt.r = 0; pt.g = 255; pt.b = 0;
+     //ROS_INFO_STREAM("Index " << pointIdxRadiusSearch[0] );
+     //ROS_INFO_STREAM("semantic pcl size: " <<  plyPointCloud_.points.size() );
+      pt.r = plyPointCloud_.points[ pointIdxRadiusSearch[0] ].r; 
+      pt.g = plyPointCloud_.points[ pointIdxRadiusSearch[0] ].g; 
+      pt.b = plyPointCloud_.points[ pointIdxRadiusSearch[0] ].b; 
+     //ROS_INFO_STREAM("Found " << pointIdxRadiusSearch.size() << " neighbors." );
+     //ROS_INFO_STREAM("Index " << pointIdxRadiusSearch[0] );
 
     /*for (size_t i = 0; i < pointIdxRadiusSearch.size (); ++i) {
       std::cout << "    "  <<   temp_cloud_xyz_ptr->points[ pointIdxRadiusSearch[i] ].x 
