@@ -16,9 +16,6 @@
 #include <pcl/io/ply_io.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl_ros/transforms.h>
-// define the following in order to eliminate the deprecated headers warning
-#define VTK_EXCLUDE_STRSTREAM_HEADERS
-#include <pcl/io/vtk_lib_io.h>
 
 using namespace std;
 using namespace ros;
@@ -36,9 +33,14 @@ Read::Read(ros::NodeHandle& nodeHandle)
     ros::requestShutdown();
   // PointCloud2 publisher to publish semantic point cloud
   pointCloudPublisher_ = nodeHandle_.advertise<sensor_msgs::PointCloud2>(pointCloudTopic_, 1, true);
+  // PointCloud2 publisher to publish robot's point cloud
+  robotMapPublisher_ = nodeHandle_.advertise<sensor_msgs::PointCloud2>("/semantic_robot_map", 1, true);
   // PointCloud2 subscriber for new depth sensor scans
   pointCloudSubscriber_ = nodeHandle_.subscribe("/camera/depth_registered/points", 1, &Read::pointCloudCallback, this);
-  //pointCloudSubscriber_ = nodeHandle_.subscribe("/camera/depth/points", 1, &Read::pointCloudCallback, this);
+  // publish semantically labeled image
+  //imagePublisher_ = imageTransport_.advertise("/semantic_img",1); 
+  imagePublisher_ = nodeHandle_.advertise<sensor_msgs::Image>("/semantic_img", 1, true);
+  // publish semantic map
   transPointCloudPublisher_ = nodeHandle_.advertise<sensor_msgs::PointCloud2>("/trans_depth_points", 1, true);
   // publish from here
   initialize();
@@ -116,7 +118,7 @@ bool Read::readFile(const std::string& filePath, const std::string& pointCloudFr
 
     // Define PointCloud2 message and copy to ROS sensor_msg for publishing
     pcl::toROSMsg(plyPointCloud_, *pointCloudMessage_);
-
+     
     // XYZ 
     //pcl::PointCloud<PointXYZ>::Ptr plyPointCloud_xyz_ptr(new pcl::PointCloud<PointXYZ>);
     //pcl::copyPointCloud(plyPointCloud_, *plyPointCloud_xyz_ptr);
@@ -124,11 +126,12 @@ bool Read::readFile(const std::string& filePath, const std::string& pointCloudFr
     pcl::copyPointCloud(plyPointCloud_, plyPointCloudXYZ_);
     plyPointCloudXYZ_ptr_ = boost::make_shared< pcl::PointCloud<pcl::PointXYZ> >(plyPointCloudXYZ_);
     kdTree_.setInputCloud(plyPointCloudXYZ_ptr_); 
-
-    // XYZRGB doesn't seem to work: create kdTree for semantic point cloud
-    //plyPointCloud_ptr_ = boost::make_shared< pcl::PointCloud<pcl::PointXYZRGB> >(plyPointCloud_);
-    //kdTree_.setInputCloud(plyPointCloud_ptr_); 
     // example: http://www.pointclouds.org/documentation/tutorials/kdtree_search.php#kdtree-search
+
+    // initialize the robot's updated semantic map as a colorless pointcloud 
+    pcl::copyPointCloud(plyPointCloudXYZ_, robotMapCloud_);
+    robotMapCloud_ptr_ = boost::make_shared< pcl::PointCloud<pcl::PointXYZRGB> >(robotMapCloud_);
+    
  
   }
   else {
@@ -282,6 +285,8 @@ void Read::pointCloudCallback(const sensor_msgs::PointCloud2ConstPtr& cloud)
       pt.r = plyPointCloud_.points[ pointIdxRadiusSearch[0] ].r; 
       pt.g = plyPointCloud_.points[ pointIdxRadiusSearch[0] ].g; 
       pt.b = plyPointCloud_.points[ pointIdxRadiusSearch[0] ].b; 
+      robotMapCloud_.points[ pointIdxRadiusSearch[0] ] = pt;
+      //temp_cloud_proj_ptr->points[ pointIdxRadiusSearch[0] ].z = 0;
      //ROS_INFO_STREAM("Found " << pointIdxRadiusSearch.size() << " neighbors." );
      //ROS_INFO_STREAM("Index " << pointIdxRadiusSearch[0] );
 
@@ -295,14 +300,28 @@ void Read::pointCloudCallback(const sensor_msgs::PointCloud2ConstPtr& cloud)
     */
     }
 
+    // for projected map
+    //pt.z = 0;
+
     //ROS_INFO("------------------------------------");
     //    
    
  }
 
+  //ex rgbd->ros: https://github.com/tue-robotics/rgbd/blob/master/src/rgbd_to_ros.cpp
+  // semantic labels for point cloud
   sensor_msgs::PointCloud2 cloudOutLabel;
   pcl::toROSMsg(*temp_cloud_ptr, cloudOutLabel);
   cloudOutLabel.header.frame_id = target;
+  // semantic labels image
+  pcl::toROSMsg(*temp_cloud_ptr, cloudOutLabel);
+  sensor_msgs::Image imgLabel;
+  pcl::toROSMsg(cloudOutLabel, imgLabel);
+  // robot updated semantic map
+  sensor_msgs::PointCloud2 cloudOutRobotMap;
+  pcl::toROSMsg(robotMapCloud_, cloudOutRobotMap);
+  cloudOutRobotMap.header.frame_id = target;
+  
 
   // publish transformed pointcloud 
   ROS_INFO_STREAM("Publishing point cloud!");
@@ -310,6 +329,8 @@ void Read::pointCloudCallback(const sensor_msgs::PointCloud2ConstPtr& cloud)
   // DEBUG: 
   //transPointCloudPublisher_.publish(radiusCloudOut);
   transPointCloudPublisher_.publish(cloudOutLabel);
+  robotMapPublisher_.publish(cloudOutRobotMap);
+  imagePublisher_.publish(imgLabel);
 
   clock_t ticks = clock() - start;
   ROS_INFO("Elapsed time: %f secs", (double)ticks/CLOCKS_PER_SEC );

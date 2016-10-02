@@ -93,6 +93,12 @@ class Read
 
   //! Point cloud publisher.
   ros::Publisher pointCloudPublisher_;
+  
+  //! Point cloud publisher.
+  ros::Publisher robotMapPublisher_;
+  
+  //! Image publisher.
+  ros::Publisher imagePublisher_;
 
   //! Timer for publishing the point cloud.
   ros::Timer timer_;
@@ -116,13 +122,17 @@ class Read
   //! Transform listener for source->target transform
   tf::TransformListener tf_listener_;
 
-  //! Point cloud loaded from PLY file
+  //! XYZRGB point cloud loaded from PLY file
   pcl::PointCloud<pcl::PointXYZRGB>::Ptr plyPointCloud_ptr_;
   pcl::PointCloud<pcl::PointXYZRGB> plyPointCloud_;
 
-  //! Point cloud loaded from PLY file
+  //! XYZ point cloud loaded from PLY file
   pcl::PointCloud<pcl::PointXYZ>::Ptr plyPointCloudXYZ_ptr_;
   pcl::PointCloud<pcl::PointXYZ> plyPointCloudXYZ_;
+
+  //! XYZRGB point cloud loaded from PLY file
+  pcl::PointCloud<pcl::PointXYZRGB>::Ptr robotMapCloud_ptr_;
+  pcl::PointCloud<pcl::PointXYZRGB> robotMapCloud_;
 
   //! KdTree for finding NNs
   pcl::KdTreeFLANN<pcl::PointXYZ> kdTree_;
