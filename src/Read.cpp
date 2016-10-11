@@ -5,15 +5,20 @@
  *   Institute: ETH Zurich, Autonomous Systems Lab
  */
 
+#include <algorithm>
 #include <string>
+#include <iostream>
+#include <iomanip>
 #include <cmath>
 #include "std_msgs/String.h"
 #include "semantic_mapper/Read.hpp"
 
 //PCL
+#include <pcl/common/common.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/io/ply_io.h>
+#include <pcl/io/png_io.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl_ros/transforms.h>
 
@@ -184,7 +189,15 @@ void Read::pointCloudCallback(const sensor_msgs::PointCloud2ConstPtr& cloud)
   //pcl::fromPCLPointCloud2(pcl_pc2, *temp_cloud_ptr); // dereference pointer to pointer
   pcl::fromROSMsg(cloudOut, *temp_cloud_ptr); // dereference pointer to pointer
   ROS_INFO("ros->pcl_xzyrgb");
-
+  // save pointcloud as image
+/*  std::stringstream fn;
+  fn.precision(4);
+  fn << "/home/brigit/jackrabbot/hallway_office/imgs/original/img_" << std::setfill('0') << std::setw(4) << count << ".png";
+  pcl::io::savePNGFile(fn.str(), *temp_cloud_ptr);
+  ROS_INFO_STREAM("saving file: " << fn.str());
+  fn.str("");
+  fn.clear();
+*/
   // convert current point cloud to pcl::PointXYZ for kdtree NN search
   pcl::PointCloud<pcl::PointXYZ>::Ptr temp_cloud_xyz_ptr(new pcl::PointCloud<pcl::PointXYZ>); // need to use ctr!!
   pcl::copyPointCloud(*temp_cloud_ptr, *temp_cloud_xyz_ptr); // copy PointXYZRGBs to PointXYZs
@@ -200,18 +213,30 @@ void Read::pointCloudCallback(const sensor_msgs::PointCloud2ConstPtr& cloud)
   std::vector<float> pointRadiusSquaredDistance;
   static const float radius(1); // 3 meters (office door->window distance) 
 
-  // narrow search semantic space to points within a radius of scan point cloud centroid 
-  Eigen::Vector4f centroid; 
+  // (0) Box search
+  pcl::PointXYZ minPt;
+  pcl::PointXYZ maxPt;
+  std::vector<int> indices;
+  pcl::getMinMax3D(*temp_cloud_xyz_ptr, minPt, maxPt);
+  ROS_INFO_STREAM("min: (" << minPt.x << "," << minPt.y << ","  << minPt.z << ")");
+  ROS_INFO_STREAM("max: (" << maxPt.x << "," << maxPt.y << ","  << maxPt.z << ")");
+  Eigen::Vector4f minPtE(minPt.x, minPt.y, minPt.z, 0);
+  Eigen::Vector4f maxPtE(maxPt.x, maxPt.y, maxPt.z, 0);
+  pcl::getPointsInBox(plyPointCloudXYZ_, minPtE, maxPtE, indices); 
+  ROS_INFO_STREAM("--------------------- # points found in box = " << indices.size());
+
+  // (1) narrow search semantic space to points within a radius of scan point cloud centroid 
+/*  Eigen::Vector4f centroid; 
   //pcl::compute3DCentroid(*temp_cloud_xyz_ptr, centroid); 
   pcl::compute3DCentroid(*temp_cloud_ptr, centroid); 
   pcl::PointXYZ centroidPt(centroid.x(),centroid.y(), centroid.z());
   //pcl::PointXYZRGB centroidPt(centroid.x(),centroid.y(), centroid.z());
   kdTree_.radiusSearch(centroidPt, radius, pointIdxRadiusSearch, pointRadiusSquaredDistance);
-
+  // end (1)
   ROS_INFO_STREAM("centroid: (" << centroid.x() << "," << centroid.y() << ","  << centroid.z() << ")");
   ROS_INFO_STREAM("point reduction = " << pointIdxRadiusSearch.size() << "/" << (pointCloudMessage_->height*pointCloudMessage_->width));
   ROS_INFO_STREAM("percent reduction = " << 100*((double)(pointIdxRadiusSearch.size())/(pointCloudMessage_->height*pointCloudMessage_->width)) << "%");
-
+*/
 
   // DEBUG: visualize filtered pointcloud
   //pcl::PointCloud<pcl::PointXYZ> radius_cloud(*plyPointCloudXYZ_ptr_, pointIdxRadiusSearch);
@@ -229,11 +254,13 @@ void Read::pointCloudCallback(const sensor_msgs::PointCloud2ConstPtr& cloud)
 
   // form new kdTree from filtered points (of original semantic point cloud)
   // convert filtered indices to boost shared pointer to create new kdTree
-  boost::shared_ptr< const std::vector<int> > ind_ptr = boost::make_shared< const std::vector<int> >(pointIdxRadiusSearch); 
+  // used previously boost::shared_ptr< const std::vector<int> > ind_ptr = boost::make_shared< const std::vector<int> >(pointIdxRadiusSearch); 
+  boost::shared_ptr< const std::vector<int> > ind_ptr = boost::make_shared< const std::vector<int> >(indices); 
 
   //kdTree for filtered points
   pcl::KdTreeFLANN<pcl::PointXYZ> radius_kdTree;
-  radius_kdTree.setInputCloud(plyPointCloudXYZ_ptr_, ind_ptr);
+  radius_kdTree.setInputCloud(plyPointCloudXYZ_ptr_, ind_ptr);  // indices into original semantic point cloud
+
   //pcl::KdTreeFLANN<pcl::PointXYZRGB> radius_kdTree;
   //radius_kdTree.setInputCloud(plyPointCloud_ptr_, ind_ptr);
 
@@ -247,20 +274,17 @@ void Read::pointCloudCallback(const sensor_msgs::PointCloud2ConstPtr& cloud)
 */
 
   //static const int k(1);
-  static const float nnRadius(0.15);
-  //std::vector<float> minDistancePoints(640*480, 0.0);
+  static const float nnRadius(0.13);
   // reset indices/distances
-  pointIdxRadiusSearch.clear();
+  pointIdxRadiusSearch.clear(); // these are the indices into the original point cloud right?
   pointRadiusSquaredDistance.clear();
-
+  
   // to set rgb values: http://docs.pointclouds.org/1.7.0/structpcl_1_1_point_x_y_z_r_g_b.html
   //BOOST_FOREACH (pcl::PointXYZ& pt, temp_cloud_xyz_ptr->points) { 
   BOOST_FOREACH (pcl::PointXYZRGB& pt, temp_cloud_ptr->points) { 
-    if( std::isnan(pt.x) || std::isnan(pt.y) || std::isnan(pt.z) ) { // look up why this happens!
+    if( std::isnan(pt.x) || std::isnan(pt.y) || std::isnan(pt.z) ) { 
 	pt.x = 999; pt.y = 999; pt.z = 999;
     }
-
-    //pt.r = 0; pt.g = 255; pt.b = 0;
 
     // uint8_t r = 0, g = 255, b = 0;
     //uint32_t rgb = ((uint32_t)r << 16 | (uint32_t)g << 8 | (uint32_t)b);
@@ -286,6 +310,7 @@ void Read::pointCloudCallback(const sensor_msgs::PointCloud2ConstPtr& cloud)
       pt.g = plyPointCloud_.points[ pointIdxRadiusSearch[0] ].g; 
       pt.b = plyPointCloud_.points[ pointIdxRadiusSearch[0] ].b; 
       robotMapCloud_.points[ pointIdxRadiusSearch[0] ] = pt;
+
       //temp_cloud_proj_ptr->points[ pointIdxRadiusSearch[0] ].z = 0;
      //ROS_INFO_STREAM("Found " << pointIdxRadiusSearch.size() << " neighbors." );
      //ROS_INFO_STREAM("Index " << pointIdxRadiusSearch[0] );
@@ -314,14 +339,16 @@ void Read::pointCloudCallback(const sensor_msgs::PointCloud2ConstPtr& cloud)
   pcl::toROSMsg(*temp_cloud_ptr, cloudOutLabel);
   cloudOutLabel.header.frame_id = target;
   // semantic labels image
-  pcl::toROSMsg(*temp_cloud_ptr, cloudOutLabel);
   sensor_msgs::Image imgLabel;
   pcl::toROSMsg(cloudOutLabel, imgLabel);
+/*  fn << "/home/brigit/jackrabbot/hallway_office/imgs/semantic/img_semantic_" << std::setfill('0') << std::setw(4) << count << ".png";
+  pcl::io::savePNGFile(fn.str(), *temp_cloud_ptr);
+  ROS_INFO_STREAM("saving file: " << fn.str());
+*/  
   // robot updated semantic map
   sensor_msgs::PointCloud2 cloudOutRobotMap;
   pcl::toROSMsg(robotMapCloud_, cloudOutRobotMap);
   cloudOutRobotMap.header.frame_id = target;
-  
 
   // publish transformed pointcloud 
   ROS_INFO_STREAM("Publishing point cloud!");
